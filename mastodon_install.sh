@@ -1,6 +1,8 @@
 #!/usr/bin/bash
 
-# Check to ensure the script is run as root/sudo 
+$DOMAIN=test.example.com
+
+# Check to ensure the script is run as root/sudo
 if [ "$(id -u)" != "0" ]; then
 	echo "This script must be run as root. Later hater." 1>&2
 	exit 1 
@@ -28,7 +30,10 @@ yarn install
 
 cp .env.production.sample .env.production
 
-# For random keys? `< /dev/urandom tr -dc _A-Z-a-z-0-9 | head -c32; echo`
+sed "s@LOCAL_DOMAIN=example.com@LOCAL_DOMAIN=$DOMAIN@g" -i .env.production
+sed "s@PAPERCLIP_SECRET=@PAPERCLIP_SECRET=$(< /dev/urandom tr -dc _A-Z-a-z-0-9 | head -c32; echo)@g" -i .env.production
+sed "s@SECRET_KEY_BASE=@SECRET_KEY_BASE=$(< /dev/urandom tr -dc _A-Z-a-z-0-9 | head -c32; echo)@g" -i .env.production
+sed "s@OTP_SECRET=@OTP_SECRET=$(< /dev/urandom tr -dc _A-Z-a-z-0-9 | head -c32; echo)@g" -i .env.production
 
 RAILS_ENV=production bundle exec rails db:setup
 RAILS_ENV=production bundle exec rails assets:precompile
