@@ -8,35 +8,46 @@ if [ "$(id -u)" != "0" ]; then
 	exit 1 
 fi
 
-curl -sL https://deb.nodesource.com/setup_4.x | sudo bash -
-apt install ack-grep build-essential ffmpeg git imagemagick libpq-dev libxml2-dev libxslt1-dev nginx postgresql postgresql-contrib redis-server redis-tools ruby2.3 ruby2.3-dev
-npm install -g npm yarn json json-diff
+function prereqs() {
+	curl -sL https://deb.nodesource.com/setup_4.x | bash -
+	apt install ack-grep build-essential ffmpeg git imagemagick libpq-dev libxml2-dev libxslt1-dev nginx postgresql postgresql-contrib redis-server redis-tools ruby2.3 ruby2.3-dev
+	npm install -g npm yarn json json-diff
 
-su - postgres
-psql
+	rbenv install 2.3.1
+}
 
-CREATE USER mastodon CREATEDB;
-\q
+function db_setup() {
+	su - postgres
+	psql
 
-rbenv install 2.3.1
+	CREATE USER mastodon CREATEDB;
+	\q
+}
 
-cd ~
-git clone https://github.com/tootsuite/mastodon.git live
-cd live
+function build_stage() {
+	cd ~
+	git clone https://github.com/tootsuite/mastodon.git live
+	cd live
 
-gem install bundler
-bundle install --deployment --without development test
-yarn install
+	gem install bundler
+	bundle install --deployment --without development test
+	yarn install
 
-cp .env.production.sample .env.production
+}
 
-sed "s@LOCAL_DOMAIN=example.com@LOCAL_DOMAIN=$DOMAIN@g" -i .env.production
-sed "s@PAPERCLIP_SECRET=@PAPERCLIP_SECRET=$(< /dev/urandom tr -dc _A-Z-a-z-0-9 | head -c32; echo)@g" -i .env.production
-sed "s@SECRET_KEY_BASE=@SECRET_KEY_BASE=$(< /dev/urandom tr -dc _A-Z-a-z-0-9 | head -c32; echo)@g" -i .env.production
-sed "s@OTP_SECRET=@OTP_SECRET=$(< /dev/urandom tr -dc _A-Z-a-z-0-9 | head -c32; echo)@g" -i .env.production
+function config_setup() {
+	cp .env.production.sample .env.production
 
-RAILS_ENV=production bundle exec rails db:setup
-RAILS_ENV=production bundle exec rails assets:precompile
+	sed "s@LOCAL_DOMAIN=example.com@LOCAL_DOMAIN=$DOMAIN@g" -i .env.production
+	sed "s@PAPERCLIP_SECRET=@PAPERCLIP_SECRET=$(< /dev/urandom tr -dc _A-Z-a-z-0-9 | head -c32; echo)@g" -i .env.production
+	sed "s@SECRET_KEY_BASE=@SECRET_KEY_BASE=$(< /dev/urandom tr -dc _A-Z-a-z-0-9 | head -c32; echo)@g" -i .env.production
+	sed "s@OTP_SECRET=@OTP_SECRET=$(< /dev/urandom tr -dc _A-Z-a-z-0-9 | head -c32; echo)@g" -i .env.production
+
+	RAILS_ENV=production bundle exec rails db:setup
+	RAILS_ENV=production bundle exec rails assets:precompile
+}
+
+funtion systemd_setup() {
 
 cat << 'EOF' > /etc/systemd/system/mastodon-web.service
 [Unit]
@@ -95,5 +106,12 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 
-systemctl enable mastodon-*.service
-systemctl restart mastodon-*.service
+	systemctl enable mastodon-*.service
+	systemctl restart mastodon-*.service
+}
+
+prereqs
+db_setup
+build_stage
+config_setup
+systemd_setup
