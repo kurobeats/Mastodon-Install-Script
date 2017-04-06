@@ -1,16 +1,18 @@
 #!/usr/bin/bash
 
-$DOMAIN=test.example.com
+DOMAIN=test.example.com
+WEBSERVERUSER=www-data
+WEBSERVERGROUP=www-data
 
 # Check to ensure the script is run as root/sudo
 if [ "$(id -u)" != "0" ]; then
 	echo "This script must be run as root. Later hater." 1>&2
-	exit 1 
+	exit 1
 fi
 
 function prereqs() {
 	curl -sL https://deb.nodesource.com/setup_4.x | bash -
-	apt install ack-grep build-essential ffmpeg git imagemagick libpq-dev libxml2-dev libxslt1-dev nginx postgresql postgresql-contrib redis-server redis-tools ruby2.3 ruby2.3-dev
+	apt install ack-grep build-essential ffmpeg git imagemagick libpq-dev libxml2-dev libxslt1-dev nginx postgresql postgresql-contrib redis-server redis-tools ruby2.3 ruby2.3-dev apache2
 	npm install -g npm yarn json json-diff
 
 	rbenv install 2.3.1
@@ -25,14 +27,14 @@ function db_setup() {
 }
 
 function build_stage() {
-	cd ~
-	git clone https://github.com/tootsuite/mastodon.git live
-	cd live
+	mkdir -p /var/www/html/
+	cd /var/www/html/
+	git clone https://github.com/tootsuite/mastodon.git $DOMAIN
+	chown -R $WEBSERVERUSER:$WEBSERVERGROUP $DOMAIN
 
 	gem install bundler
 	bundle install --deployment --without development test
 	yarn install
-
 }
 
 function config_setup() {
@@ -47,6 +49,31 @@ function config_setup() {
 	RAILS_ENV=production bundle exec rails assets:precompile
 }
 
+function apache2_setup() {
+cat < 'EOF' >> /etc/apache2/sites-enabled/$DOMAIN.conf
+<VirtualHost *:443>
+
+ServerAdmin admin@$DOMAIN
+ServerName $DOMAIN
+ErrorLog /var/log/$DOMAIN_error.log
+TransferLog /var/log/$DOMAIN_access.log
+LogLevel warn
+
+<Location />
+        Order allow,deny
+        Allow from all
+</Location>
+
+ProxyPreserveHost On
+ProxyPass / http://localhost:3000/
+ProxyPassReverse / http://localhost:3000/
+
+</VirtualHost>
+EOF
+
+	systemctl enable apache2
+}
+
 funtion systemd_setup() {
 
 cat << 'EOF' > /etc/systemd/system/mastodon-web.service
@@ -57,7 +84,7 @@ After=network.target
 [Service]
 Type=simple
 User=mastodon
-WorkingDirectory=/home/mastodon/live
+WorkingDirectory=/var/www/html/$DOMAIN
 Environment="RAILS_ENV=production"
 Environment="PORT=3000"
 ExecStart=/home/mastodon/.rbenv/shims/bundle exec puma -C config/puma.rb
@@ -76,7 +103,7 @@ After=network.target
 [Service]
 Type=simple
 User=mastodon
-WorkingDirectory=/home/mastodon/live
+WorkingDirectory=/var/www/html/$DOMAIN
 Environment="RAILS_ENV=production"
 Environment="DB_POOL=5"
 ExecStart=/home/mastodon/.rbenv/shims/bundle exec sidekiq -c 5 -q default -q mailers -q pull -q push
@@ -95,7 +122,7 @@ After=network.target
 [Service]
 Type=simple
 User=mastodon
-WorkingDirectory=/home/mastodon/live
+WorkingDirectory=/var/www/html/$DOMAIN
 Environment="NODE_ENV=production"
 Environment="PORT=4000"
 ExecStart=/usr/bin/npm run start
@@ -114,4 +141,5 @@ prereqs
 db_setup
 build_stage
 config_setup
+apache2_setup
 systemd_setup
