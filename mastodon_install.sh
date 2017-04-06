@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/bin/bash
 
 DOMAIN=test.example.com
 WEBSERVERUSER=www-data
@@ -11,10 +11,9 @@ if [ "$(id -u)" != "0" ]; then
 fi
 
 function prereqs() {
-	curl -sL https://deb.nodesource.com/setup_4.x | bash -
-	apt install ack-grep build-essential ffmpeg git imagemagick libpq-dev libxml2-dev libxslt1-dev nginx postgresql postgresql-contrib redis-server redis-tools ruby2.3 ruby2.3-dev apache2
+	apt install ack-grep build-essential curl ffmpeg git imagemagick libpq-dev libxml2-dev libxslt1-dev git postgresql postgresql-contrib redis-server redis-tools ruby2.3 ruby2.3-dev apache2
 	npm install -g npm yarn json json-diff
-
+	curl -sL https://deb.nodesource.com/setup_4.x | bash -
 	rbenv install 2.3.1
 }
 
@@ -50,7 +49,7 @@ function config_setup() {
 }
 
 function apache2_setup() {
-cat < 'EOF' >> /etc/apache2/sites-enabled/$DOMAIN.conf
+cat << 'EOF' > /etc/apache2/sites-enabled/$DOMAIN.conf
 <VirtualHost *:443>
 
 ServerAdmin admin@$DOMAIN
@@ -74,7 +73,7 @@ EOF
 	systemctl enable apache2
 }
 
-funtion systemd_setup() {
+function systemd_setup() {
 
 cat << 'EOF' > /etc/systemd/system/mastodon-web.service
 [Unit]
