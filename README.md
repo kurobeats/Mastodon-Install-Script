@@ -1,2 +1,3 @@
-# Mastodon-Install-Script
-A bash script for installing your own mastodon instance
+# Mastodon Install Script
+
+This won't work yet, it needs much love.
