@@ -10,25 +10,31 @@ if [ "$(id -u)" != "0" ]; then
 	exit 1
 fi
 
+function repos_setup() {
+	apt -y install apt-transport-https
+	wget -qO - https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key add -
+	echo 'deb https://deb.nodesource.com/node_4.x jessie main' > /etc/apt/sources.list.d/nodesource.list
+}
+
 function prereqs() {
-	apt install ack-grep build-essential curl ffmpeg git imagemagick libpq-dev libxml2-dev libxslt1-dev git postgresql postgresql-contrib redis-server redis-tools ruby2.3 ruby2.3-dev apache2
+	apt update
+	apt -y install nodejs ack-grep rbenv build-essential curl ffmpeg git imagemagick libpq-dev libxml2-dev libxslt1-dev git postgresql postgresql-contrib redis-server redis-tools ruby2.3 ruby2.3-dev apache2
 	npm install -g npm yarn json json-diff
-	curl -sL https://deb.nodesource.com/setup_4.x | bash -
 	rbenv install 2.3.1
 }
 
 function db_setup() {
 	su - postgres
 	psql
-
 	CREATE USER mastodon CREATEDB;
-	\q
+	exit
 }
 
 function build_stage() {
 	mkdir -p /var/www/html/
 	cd /var/www/html/
 	git clone https://github.com/tootsuite/mastodon.git $DOMAIN
+	rm -rf $DOMAIN/.git
 	chown -R $WEBSERVERUSER:$WEBSERVERGROUP $DOMAIN
 
 	gem install bundler
@@ -86,7 +92,7 @@ User=mastodon
 WorkingDirectory=/var/www/html/$DOMAIN
 Environment="RAILS_ENV=production"
 Environment="PORT=3000"
-ExecStart=/home/mastodon/.rbenv/shims/bundle exec puma -C config/puma.rb
+ExecStart=/var/www/html/$DOMAIN/.rbenv/shims/bundle exec puma -C config/puma.rb
 TimeoutSec=15
 Restart=always
 
@@ -105,7 +111,7 @@ User=mastodon
 WorkingDirectory=/var/www/html/$DOMAIN
 Environment="RAILS_ENV=production"
 Environment="DB_POOL=5"
-ExecStart=/home/mastodon/.rbenv/shims/bundle exec sidekiq -c 5 -q default -q mailers -q pull -q push
+ExecStart=/var/www/html/$DOMAIN/.rbenv/shims/bundle exec sidekiq -c 5 -q default -q mailers -q pull -q push
 TimeoutSec=15
 Restart=always
 
@@ -136,6 +142,7 @@ EOF
 	systemctl restart mastodon-*.service
 }
 
+repos_setup
 prereqs
 db_setup
 build_stage
